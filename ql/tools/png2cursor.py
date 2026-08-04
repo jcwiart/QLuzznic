@@ -121,7 +121,7 @@ def emit_bytes(lines, label, data, n_frames):
 
 
 def main():
-    src = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("selection.png")
+    src = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("assets/selection.png")
     dst = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("asm/cursor_data.s")
 
     img = Image.open(src).convert("RGB")

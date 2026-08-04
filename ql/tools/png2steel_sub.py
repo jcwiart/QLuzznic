@@ -53,7 +53,7 @@ def encode_tile(img):
 
 
 def main():
-    src = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("steel_sub.png")
+    src = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("assets/steel_sub.png")
     dst = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("asm/steel_sub_data.s")
 
     img = Image.open(src).convert("RGB")

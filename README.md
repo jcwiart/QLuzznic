@@ -5,10 +5,10 @@ and 68000 assembly, running in mode 8 (256x256, 8 colours) on real
 128K-RAM QL hardware (and in emulation via [QemuLator][qemulator] or the
 [MiSTer QL core][ql-mister]).
 
-Ships its own 100-level campaign (`qluzznic-levels.json`), a "joker"
-wildcard piece, a hex continue-code system, and a title screen with a
-bounce-in logo animation -- all built to fit the real hardware's 128K
-ceiling.
+Ships its own 100-level campaign (`ql/assets/qluzznic-levels.json`), a
+"joker" wildcard piece, a hex continue-code system, and a title screen
+with a bounce-in logo animation -- all built to fit the real hardware's
+128K ceiling.
 
 ## Building
 
@@ -32,11 +32,11 @@ make run      # builds, then opens it in QemuLator (set QEMULATOR_APP=
               # to point at your own install -- see the Makefile)
 ```
 
-`ql/asm/*_data.s` and `ql/src/levels.c` are generated from source assets
-(PNGs, `qluzznic-levels.json`) by the scripts in `ql/tools/` -- not part
-of the normal `make` build, re-run the relevant script by hand whenever
-you change a source asset (see that generated file's own header comment
-for the exact command).
+`ql/asm/*_data.s` and `ql/src/levels.c` are generated from the source
+assets in `ql/assets/` (PNGs, `qluzznic-levels.json`) by the scripts in
+`ql/tools/` -- not part of the normal `make` build, re-run the relevant
+script by hand whenever you change a source asset (see that generated
+file's own header comment for the exact command).
 
 ## Testing
 

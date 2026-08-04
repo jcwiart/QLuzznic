@@ -56,7 +56,7 @@ def qluzznic_interior_of(rows):
 
 
 def main():
-    src = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("../qluzznic-levels.json")
+    src = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("assets/qluzznic-levels.json")
     dst = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("src/levels.c")
 
     data = json.loads(src.read_text())

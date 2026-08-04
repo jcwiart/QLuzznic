@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Convert a logo PNG into raw mode 8 pixel data + an as68 .s file.
 Same bit layout as tools/png2sprites.py, for a single non-tiled image
-(like tools/png2sidebar.py) instead of a sprite strip.
+instead of a sprite strip.
 
 Unlike blocks.png (already exact QL palette), the source logo art has
 a slight colour-profile shift baked in from whatever tool exported it:
