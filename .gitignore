@@ -1,0 +1,24 @@
+# Build artifacts (regenerate with `make` in ql/)
+ql/build/
+ql/tests/host_test
+
+# Third-party build toolchain (xtc68 + c68-support), each its own git
+# clone -- not vendored here on purpose: c68-support has no declared
+# upstream license, and xtc68 (MIT) is still better tracked at its own
+# source than copied into this repo. See README.md for setup.
+toolchain/
+
+# NOTE: ql/asm/*_data.s and ql/src/levels.c are generated from source
+# PNGs/JSON by tools/*.py, but that step isn't wired into the Makefile
+# (it's a manual re-run whenever the source asset changes -- see each
+# generated file's own header comment for the exact command). They're
+# committed on purpose so `git clone && make` works without first
+# having to know to run every generator by hand.
+
+# macOS
+.DS_Store
+__MACOSX/
+
+# Claude Code session/tool config -- local-machine paths and per-session
+# permission state, not project config.
+.claude/
