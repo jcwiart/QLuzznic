@@ -596,12 +596,10 @@ packbits_literal_header:
 	rts
 
 ; void blit_logo_mini(void)
-; Draws the 96x29 mini QLuzznic logo (tools/png2logo.py, Mini_logo_
-; QLuzznic.png, PackBits-compressed) at the top-left corner (0,0),
-; replacing the old red placeholder rectangle (see game_loop.c's
-; draw_hud_static). Position is always (0,0) so no address math is
-; needed -- dest starts at scr0 itself.
-logo_mini_w_groups	equ	24		; 96/4
+; Draws the 100x29 mini QLuzznic logo (tools/png2logo.py, logo_mini.png,
+; PackBits-compressed) at the top-left corner (0,0). Position is always
+; (0,0) so no address math is needed -- dest starts at scr0 itself.
+logo_mini_w_groups	equ	25		; 100/4 (100 is already a multiple of 4, no padding needed)
 logo_mini_h		equ	29
 
 	.extern	_blit_logo_mini
@@ -644,13 +642,13 @@ logo_double_table:
 ; void blit_logo_big(void)
 ; Draws the title screen logo by reading the SAME compressed mini
 ; logo stream (_logo_mini_data) as blit_logo_mini and doubling every
-; pixel horizontally and vertically (96x29 -> 192x58) via
+; pixel horizontally and vertically (100x29 -> 200x58) via
 ; logo_double_table above -- confirmed pixel-for-pixel identical to a
-; 2x scale of the mini logo, so storing a second ~3.6KB compressed
-; copy was pure waste on a target where a few KB is the difference
-; between booting and not (see [[ql-boot-crash-is-memory]]). Position
-; (32,24) fixed at compile time; 192px wide divides the 256px screen
-; margin evenly (x=(256-192)/2=32).
+; 2x scale of the mini logo, so storing a second compressed copy was
+; pure waste on a target where a few KB is the difference between
+; booting and not (see [[ql-boot-crash-is-memory]]). Position (28,24)
+; fixed at compile time; 200px wide centres evenly on the 256px screen
+; (x=(256-200)/2=28).
 ;
 ; Each decoded (even,odd) source pair (4 source pixels) doubles into
 ; TWO destination groups (8 pixels): group A from each byte's high
@@ -659,9 +657,9 @@ logo_double_table:
 ; a2) to double vertically too. Row advance is a fixed compile-time
 ; delta (2 screen lines minus the row's own width in bytes) -- no
 ; runtime multiply anywhere, same discipline as every other blit here.
-logo_big_w_groups	equ	logo_mini_w_groups*2	; 48 (192/4)
+logo_big_w_groups	equ	logo_mini_w_groups*2	; 50 (200/4)
 logo_big_h		equ	logo_mini_h*2		; 58
-logo_big_x		equ	32
+logo_big_x		equ	28
 logo_big_row_bytes	equ	logo_mini_w_groups*4	; 2 dest groups/src group * 2 bytes, per line
 logo_big_row_advance	equ	2*scr_llen - logo_big_row_bytes
 

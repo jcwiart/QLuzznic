@@ -55,7 +55,7 @@ extern void blit_logo_big_y(int y);
 #define FRAMES_PER_SECOND 50
 
 /* HUD band, y=0..31 (freed up by the border-row/column half-tile
- * trick -- see render.h's HUD_HEIGHT). Real logo top-left (96x29,
+ * trick -- see render.h's HUD_HEIGHT). Real logo top-left (100x29,
  * blit_logo_mini in asm/display.s -- see tools/png2logo.py), label+
  * number fields squeezed to its right. Numbers are left-aligned, no
  * padding (draw_number in text.c) -- each field's X is a fixed
@@ -67,27 +67,27 @@ extern void blit_logo_big_y(int y);
  * static labels only need drawing once (draw_hud_static, called after
  * fill_screen). All x values are multiples of 4 (mode 8's group-
  * alignment rule). */
-#define LEVEL_LABEL_X 104
+#define LEVEL_LABEL_X 108 /* logo's 100px width + 8px gap */
 #define LEVEL_LABEL_Y 4
-#define LEVEL_NUMBER_X 152 /* LEVEL_LABEL_X + 5*GLYPH_PX("LEVEL") + 8px gap */
+#define LEVEL_NUMBER_X 156 /* LEVEL_LABEL_X + 5*GLYPH_PX("LEVEL") + 8px gap */
 #define LEVEL_NUMBER_Y 4
 #define LEVEL_CLEAR_X LEVEL_NUMBER_X
 #define LEVEL_CLEAR_Y LEVEL_NUMBER_Y
 #define LEVEL_CLEAR_W 24 /* 3 digits reserved (level can reach 100) */
 #define LEVEL_CLEAR_H GLYPH_PX
 
-#define TIME_LABEL_X 184 /* LEVEL_NUMBER_X + 2*GLYPH_PX(2-digit level) + 16px gap */
+#define TIME_LABEL_X 188 /* LEVEL_NUMBER_X + 2*GLYPH_PX(2-digit level) + 16px gap */
 #define TIME_LABEL_Y 4
-#define TIME_NUMBER_X 224 /* TIME_LABEL_X + 4*GLYPH_PX("TIME") + 8px gap */
+#define TIME_NUMBER_X 228 /* TIME_LABEL_X + 4*GLYPH_PX("TIME") + 8px gap */
 #define TIME_NUMBER_Y 4
 #define TIME_CLEAR_X TIME_NUMBER_X
 #define TIME_CLEAR_Y TIME_NUMBER_Y
-#define TIME_CLEAR_W 24 /* 3 digits (time is whole seconds now, max LEVEL_TIME_SECONDS=120) -- reaches x=248, 8px shy of the 256px screen edge */
+#define TIME_CLEAR_W 24 /* 3 digits (time is whole seconds now, max LEVEL_TIME_SECONDS=120) -- reaches x=252, 4px shy of the 256px screen edge */
 #define TIME_CLEAR_H GLYPH_PX
 
-#define SCORE_LABEL_X 104 /* under LEVEL_LABEL_X, past the logo's 96px width */
+#define SCORE_LABEL_X 108 /* under LEVEL_LABEL_X, past the logo's 100px width */
 #define SCORE_LABEL_Y 18
-#define SCORE_NUMBER_X 152 /* SCORE_LABEL_X + 5*GLYPH_PX("SCORE") + 8px gap */
+#define SCORE_NUMBER_X 156 /* SCORE_LABEL_X + 5*GLYPH_PX("SCORE") + 8px gap */
 #define SCORE_NUMBER_Y 18
 #define SCORE_CLEAR_X SCORE_NUMBER_X
 #define SCORE_CLEAR_Y SCORE_NUMBER_Y
@@ -123,15 +123,15 @@ extern void blit_logo_big_y(int y);
 #define CODE_DIGITS_X 132 /* CODE_LABEL_X + 5*GLYPH_PX ("CODE:" incl. no trailing space) */
 
 /* Title screen, shown once before the first level loads. Real logo
- * (192x58, blit_logo_big_y in asm/display.s -- see tools/png2logo.py)
+ * (200x58, blit_logo_big_y in asm/display.s -- see tools/png2logo.py)
  * replaces the old placeholder banner-font "QLUZZNIC" text; x is
- * fixed at compile time in the asm (logo_big_x=32 there), y is a
+ * fixed at compile time in the asm (logo_big_x=28 there), y is a
  * runtime argument so the logo can be redrawn at a different height
  * each frame for the bounce-in intro below. Control summary lines
  * shifted down 8px to clear the logo's greater height (58px vs the
  * old text's 16px). */
-#define TITLE_LOGO_X 32       /* must match asm/display.s's logo_big_x equ exactly */
-#define TITLE_LOGO_W 192      /* must match asm/display.s's logo_big_w_groups*4 exactly */
+#define TITLE_LOGO_X 28       /* must match asm/display.s's logo_big_x equ exactly */
+#define TITLE_LOGO_W 200      /* must match asm/display.s's logo_big_w_groups*4 exactly */
 #define TITLE_LOGO_H 58       /* must match asm/display.s's logo_big_h exactly */
 #define TITLE_LOGO_REST_Y 24  /* final resting Y, matches the old fixed blit_logo_big's position */
 #define TITLE_LOGO_CLEAR_Y 0  /* top of the bounce range (logo starts here) */
