@@ -13,6 +13,22 @@ Ships its own 100-level campaign (`ql/assets/qluzznic-levels.json`), a
 with a bounce-in logo animation -- all built to fit the real hardware's
 128K ceiling.
 
+## How to Play
+
+Slide blocks left/right to line up 2 or more of the same colour
+touching horizontally or vertically -- they clear automatically once
+they touch. Blocks fall under gravity after every move. Clear the
+whole board before time runs out. The rainbow "joker" piece clears
+together with a single stranded colour touching it (but not with a
+second joker, and not if it touches two different colours at once).
+
+- **Move the cursor:** Arrows, or ESDF (left hand), or IJKL (right hand)
+- **Slide the selected block:** hold Space, then Left/Right (or S/F, or J/L)
+- **Restart the current level:** Escape
+- **Continue later:** each level clear shows a 4-character hex code --
+  type it in from the title screen's ENTER CODE menu to jump straight
+  back to that level
+
 ## Building
 
 This repo doesn't vendor the QDOS cross-compiler toolchain -- set up your
