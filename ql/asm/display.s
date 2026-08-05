@@ -663,32 +663,34 @@ logo_big_x		equ	28
 logo_big_row_bytes	equ	logo_mini_w_groups*4	; 2 dest groups/src group * 2 bytes, per line
 logo_big_row_advance	equ	2*scr_llen - logo_big_row_bytes
 
-; void blit_logo_big_y(int y)
-; Same drawing as above, but y is a runtime pixel-Y argument instead
-; of a fixed compile-time offset (x stays fixed at logo_big_x) -- like
-; blit_tile_y is to blit_tile. Used by the title screen's bounce-in
-; intro (game_loop.c) to redraw the logo at a different Y every frame
-; from a precomputed table; the final call in that sequence lands on
-; the same Y (24) the old fixed blit_logo_big used, so the settled
-; logo ends up in exactly the same place.
-	.extern	_blit_logo_big_y
-_blit_logo_big_y:
-	link	a6,#0
+; void decode_logo_big(void)
+; Decodes the PackBits logo stream and doubles it (same table-driven
+; expansion the old fixed/scrolling logo blits used) into
+; logo_big_cache -- but ONE copy per source row, not the vertically-
+; doubled pair a screen blit would need, since the two destination
+; lines are always identical; ripple_logo_big_cached_y below
+; re-duplicates each cached row to both screen lines at blit time
+; instead. That halves the cache to logo_mini_h(29) rows -- 2900
+; bytes instead of 5800 for all 58 doubled rows, which mattered: the
+; 58-row version pushed total dataspace over the real QL's 128K
+; ceiling (see [[ql-boot-crash-is-memory]]).
+; Call once before the title screen's bounce-in intro so its
+; per-frame blit becomes a plain byte copy instead of re-decoding
+; PackBits on every one of the intro's frames (the decode was the
+; actual bottleneck -- see TITLE_LOGO_BOUNCE_Y's comment in
+; game_loop.c).
+	.extern	_decode_logo_big
+_decode_logo_big:
 	movem.l	d0-d7/a0-a3,-(sp)
 	lea	_logo_mini_data,a0
-	move.l	8(a6),d0		; y
-	lsl.l	#7,d0			; y*128
-	add.l	#logo_big_x/2,d0
-	lea	scr0,a1
-	adda.l	d0,a1
-	lea	scr_llen(a1),a2
+	lea	logo_big_cache,a1
 	lea	logo_double_table,a3
 	moveq	#0,d4
 	moveq	#0,d5
 	moveq	#logo_mini_h-1,d2
-blit_logo_big_row_loop:
+decode_logo_big_row_loop:
 	moveq	#logo_mini_w_groups-1,d1
-blit_logo_big_group_loop:
+decode_logo_big_group_loop:
 	bsr	packbits_next_pair		; d6=even, d7=odd (4 source pixels)
 
 	moveq	#0,d0			; group A (pixels 0,1 doubled)
@@ -696,33 +698,77 @@ blit_logo_big_group_loop:
 	lsr.b	#4,d0
 	move.b	0(a3,d0.w),d3
 	move.b	d3,(a1)+
-	move.b	d3,(a2)+
 	moveq	#0,d0
 	move.b	d7,d0
 	lsr.b	#4,d0
 	move.b	0(a3,d0.w),d3
 	move.b	d3,(a1)+
-	move.b	d3,(a2)+
 
 	moveq	#0,d0			; group B (pixels 2,3 doubled)
 	move.b	d6,d0
 	and.b	#$0f,d0
 	move.b	0(a3,d0.w),d3
 	move.b	d3,(a1)+
-	move.b	d3,(a2)+
 	moveq	#0,d0
 	move.b	d7,d0
 	and.b	#$0f,d0
 	move.b	0(a3,d0.w),d3
 	move.b	d3,(a1)+
-	move.b	d3,(a2)+
 
-	dbf	d1,blit_logo_big_group_loop
-
-	adda.l	#logo_big_row_advance,a1
-	adda.l	#logo_big_row_advance,a2
-	dbf	d2,blit_logo_big_row_loop
+	dbf	d1,decode_logo_big_group_loop
+	dbf	d2,decode_logo_big_row_loop
 	movem.l	(sp)+,d0-d7/a0-a3
+	rts
+
+; void ripple_logo_big_cached_y(unsigned char *y_history)
+; Draws the logo as logo_big_row_bytes/logo_ripple_col_bytes
+; independent logo_ripple_col_bytes*2-px-wide vertical strips, each at
+; its own Y from y_history[column] (one byte per strip, left to right)
+; instead of one rigid Y -- caller (show_title_screen in game_loop.c)
+; delays each entry by one extra VBL versus its left neighbour, giving
+; a wave that sweeps across the logo as it bounces. More, smaller
+; inner loops than a single rigid blit (a 29-row loop per column
+; instead of one 29-row loop total) -- a first 4px/column (2-byte)
+; version was slow and flickery with a full-box clear every frame;
+; switching to 8px/column plus letting the caller clear only each
+; column's own exposed sliver (instead of the whole bounding box)
+; fixed both.
+logo_ripple_col_bytes	equ	4		; 8px/column (2px/byte)
+	.extern	_ripple_logo_big_cached_y
+_ripple_logo_big_cached_y:
+	link	a6,#0
+	movem.l	d0-d6/a0-a3,-(sp)
+	move.l	8(a6),a3		; y_history pointer
+	moveq	#0,d4			; this column's byte offset within a cache/screen row
+	moveq	#logo_big_row_bytes/logo_ripple_col_bytes-1,d5	; column counter
+ripple_col_loop:
+	moveq	#0,d0
+	move.b	(a3)+,d0		; y for this column
+	lsl.l	#7,d0			; y*128
+	add.l	#logo_big_x/2,d0
+	add.l	d4,d0			; + this column's offset within the row
+	lea	scr0,a1
+	adda.l	d0,a1
+	lea	scr_llen(a1),a2
+	lea	logo_big_cache,a0
+	adda.l	d4,a0
+	moveq	#logo_mini_h-1,d2
+ripple_row_loop:
+	moveq	#logo_ripple_col_bytes-1,d6
+ripple_byte_loop:
+	move.b	(a0)+,d3
+	move.b	d3,(a1)+
+	move.b	d3,(a2)+
+	dbf	d6,ripple_byte_loop
+	suba.l	#logo_ripple_col_bytes,a1	; back to this row's start
+	suba.l	#logo_ripple_col_bytes,a2
+	adda.l	#logo_big_row_bytes-logo_ripple_col_bytes,a0	; next cache row, same column
+	adda.l	#scr_llen*2,a1
+	adda.l	#scr_llen*2,a2
+	dbf	d2,ripple_row_loop
+	add.l	#logo_ripple_col_bytes,d4
+	dbf	d5,ripple_col_loop
+	movem.l	(sp)+,d0-d6/a0-a3
 	unlk	a6
 	rts
 
@@ -805,6 +851,8 @@ draw_banner_glyph_row_loop:
 
 	.sect	.bss
 	.even
+logo_big_cache:
+	ds.b	logo_mini_h*logo_big_row_bytes	; one row per source line (see decode_logo_big) -- 2900 bytes, not logo_big_h(58)'s 5800
 	ds.b	2048			; private supervisor stack -- turned out
 					; the real constraint was total system
 					; RAM (128K on a real QL), not this

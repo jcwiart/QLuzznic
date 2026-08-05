@@ -28,7 +28,8 @@ extern int kbd_row(int row);
 extern void clear_rect(int x, int y, int w, int h);
 extern void blit_tile(int col, int row, int sprite_index);
 extern void blit_logo_mini(void);
-extern void blit_logo_big_y(int y);
+extern void decode_logo_big(void);
+extern void ripple_logo_big_cached_y(unsigned char *y_history);
 
 #define KEY_ROW1 1
 #define K1_LEFT  1
@@ -123,38 +124,60 @@ extern void blit_logo_big_y(int y);
 #define CODE_DIGITS_X 132 /* CODE_LABEL_X + 5*GLYPH_PX ("CODE:" incl. no trailing space) */
 
 /* Title screen, shown once before the first level loads. Real logo
- * (200x58, blit_logo_big_y in asm/display.s -- see tools/png2logo.py)
- * replaces the old placeholder banner-font "QLUZZNIC" text; x is
- * fixed at compile time in the asm (logo_big_x=28 there), y is a
- * runtime argument so the logo can be redrawn at a different height
- * each frame for the bounce-in intro below. Control summary lines
- * shifted down 8px to clear the logo's greater height (58px vs the
- * old text's 16px). */
+ * (200x58, ripple_logo_big_cached_y in asm/display.s -- see
+ * tools/png2logo.py) replaces the old placeholder banner-font
+ * "QLUZZNIC" text; x is fixed at compile time in the asm
+ * (logo_big_x=28 there), y is a runtime argument so the logo can be
+ * redrawn at a different height each frame for the continuously
+ * looping, rippling bounce below. Control summary lines shifted down
+ * 8px to clear the logo's greater height (58px vs the old text's
+ * 16px). */
 #define TITLE_LOGO_X 28       /* must match asm/display.s's logo_big_x equ exactly */
 #define TITLE_LOGO_W 200      /* must match asm/display.s's logo_big_w_groups*4 exactly */
 #define TITLE_LOGO_H 58       /* must match asm/display.s's logo_big_h exactly */
 #define TITLE_LOGO_REST_Y 24  /* final resting Y, matches the old fixed blit_logo_big's position */
-#define TITLE_LOGO_CLEAR_Y 0  /* top of the bounce range (logo starts here) */
-#define TITLE_LOGO_CLEAR_H (TITLE_LOGO_REST_Y + TITLE_LOGO_H) /* bounce range + logo height, covers every frame's start position -- used once, for the very first draw only */
+#define TITLE_LOGO_CLEAR_Y 12 /* top of the (now half-height) bounce range -- must match TITLE_LOGO_BOUNCE_Y[0] */
+#define TITLE_LOGO_CLEAR_H (TITLE_LOGO_REST_Y + TITLE_LOGO_H) /* bounce range + logo height, covers every frame's start position -- cleared before the first bounce and again before each replay */
 
-/* Bounce-in curve for the title logo: a discrete bouncing-ball
- * simulation (gravity 1.0px/frame^2, restitution 0.55), precomputed
- * in Python and baked in here as plain Y positions -- the QL only
- * ever walks this table frame by frame, no runtime physics/float math
- * at all. Y never goes below 0 (the logo starts fully on-screen at
- * the top, no off-screen clipping needed) and settles exactly at
- * TITLE_LOGO_REST_Y. Kept short (18 steps) on purpose: redrawing this
- * logo means re-decoding its PackBits stream (see packbits_next_pair
- * in asm/display.s), which is too slow to do smoothly every single
- * 50Hz tick on a 68008 -- a first, denser (45-step) curve made the
- * intro noticeably slow with visible flicker (the clear-then-redraw
- * gap became visible on screen) because each "frame" was actually
- * taking multiple real VBL periods to draw. This coarser curve plus
- * only clearing the exposed sliver each step (not the whole bounding
- * box -- see the loop below) fixed both. Played once (see
- * title_bounce_played below), not on every return to the menu. */
+#define LOGO_RIPPLE_COLUMNS 25 /* must match asm/display.s's logo_big_row_bytes/logo_ripple_col_bytes exactly (8px = 4 bytes per column) */
+#define LOGO_RIPPLE_COL_PX 8   /* screen pixel width of one column -- must match asm's logo_ripple_col_bytes*2 exactly */
+
+/* Perpetual bounce curve for the title logo: falls from
+ * TITLE_LOGO_CLEAR_Y accelerating under gravity (g=0.45px/frame^2,
+ * simulated in Python with float precision then rounded to whole
+ * pixels, landing exactly on TITLE_LOGO_REST_Y, the "floor" -- a
+ * 12px amplitude, half of an earlier 24px/full-height version),
+ * then rises back up decelerating along the exact mirror of the
+ * fall (the same rounded deltas, reversed and negated, so the rise
+ * is a perfect visual mirror of the fall rather than a separately-
+ * rounded and possibly lopsided curve) -- a momentary 1-frame hover
+ * at the top (TITLE_LOGO_CLEAR_Y shows twice back to back, once
+ * ending a rise and once starting the next fall) is the natural apex
+ * of a real parabolic bounce, not a glitch. This g keeps the max
+ * single-frame delta to 3px over 14 total frames -- a first, steeper
+ * g=1.0 curve reached the floor in far fewer frames but with much
+ * bigger per-frame deltas, a visible "jump" right around impact even
+ * though the timing itself was smooth. No restitution/decay: unlike
+ * a real dropped ball, this loops the *same* fall-rise cycle forever,
+ * so it never settles -- see show_title_screen below, which just
+ * walks this table on a repeating index for as long as the title
+ * screen is up. Precomputed as plain Y positions (no runtime physics/
+ * float math at all -- the QL only ever walks this table frame by
+ * frame).
+ *
+ * Redrawing the logo used to mean re-decoding its PackBits stream on
+ * every single frame (see packbits_next_pair in asm/display.s), too
+ * slow to do smoothly every 50Hz tick on a 68008 -- a first, denser
+ * 45-step attempt at this same curve made it noticeably slow with
+ * visible flicker (the clear-then-redraw gap became visible on
+ * screen) because each "frame" was actually taking multiple real VBL
+ * periods to draw. Only clearing the exposed sliver each step (not
+ * the whole bounding box), plus decode_logo_big/blit_logo_big_cached_y
+ * (decode the PackBits stream once into logo_big_cache, then every
+ * frame is a plain byte copy) fixed the slowness, which is what makes
+ * looping this forever affordable. */
 static const unsigned char TITLE_LOGO_BOUNCE_Y[] = {
-    0, 1, 3, 6, 10, 15, 21, 24, 21, 19, 18, 19, 20, 22, 24, 23, 24, 24,
+    12, 12, 13, 15, 16, 19, 21, 24, 21, 19, 16, 15, 13, 12,
 };
 #define TITLE_LOGO_BOUNCE_FRAMES (sizeof(TITLE_LOGO_BOUNCE_Y) / sizeof(TITLE_LOGO_BOUNCE_Y[0]))
 
@@ -227,7 +250,6 @@ static int banner_visible;
 static int banner_ticks;
 static int joker_tip_shown = 0;
 static int level_start_score = 0;
-static int title_bounce_played = 0;
 
 /* Draws the HUD's static parts (logo + field labels) --
  * called once, right after fill_screen. The number fields drawn over
@@ -367,33 +389,18 @@ static void draw_menu_pointer(TitleMenuChoice choice) {
 static TitleMenuChoice show_title_screen(void) {
     TitleMenuChoice choice = MENU_NEW_GAME;
     int bits, pressed, prev_bits = 0;
-
-    if (!title_bounce_played) {
-        int f;
-        int prev_y = TITLE_LOGO_BOUNCE_Y[0];
-
-        /* only the very first draw needs the full-range clear (nothing
-         * on screen yet); every step after that only needs to erase
-         * the sliver the logo's opaque redraw won't itself cover --
-         * see TITLE_LOGO_BOUNCE_Y's comment for why this matters. */
-        clear_rect(TITLE_LOGO_X, TITLE_LOGO_CLEAR_Y, TITLE_LOGO_W, TITLE_LOGO_CLEAR_H);
-
-        for (f = 0; f < (int)TITLE_LOGO_BOUNCE_FRAMES; f++) {
-            int y = TITLE_LOGO_BOUNCE_Y[f];
-
-            wait_vbl();
-            if (y > prev_y) {
-                clear_rect(TITLE_LOGO_X, prev_y, TITLE_LOGO_W, y - prev_y);
-            } else if (y < prev_y) {
-                clear_rect(TITLE_LOGO_X, y + TITLE_LOGO_H, TITLE_LOGO_W, prev_y - y);
-            }
-            blit_logo_big_y(y);
-            prev_y = y;
-        }
-        title_bounce_played = 1;
-    } else {
-        blit_logo_big_y(TITLE_LOGO_REST_Y);
+    int logo_frame = 0;
+    unsigned char logo_col_history[LOGO_RIPPLE_COLUMNS]; /* per-column Y, one VBL further behind per column -- see the ripple loop below */
+    int col_i;
+    for (col_i = 0; col_i < LOGO_RIPPLE_COLUMNS; col_i++) {
+        logo_col_history[col_i] = TITLE_LOGO_BOUNCE_Y[0];
     }
+
+    /* decode the logo's PackBits stream once instead of on every frame
+     * of every bounce cycle -- see TITLE_LOGO_BOUNCE_Y's comment. */
+    decode_logo_big();
+    clear_rect(TITLE_LOGO_X, TITLE_LOGO_CLEAR_Y, TITLE_LOGO_W, TITLE_LOGO_CLEAR_H);
+
     draw_string(TITLE_LINE1_X, TITLE_LINE1_Y, "ARROWS MOVE CURSOR");
     draw_string(TITLE_LINE2_X, TITLE_LINE2_Y, "SPACE THEN ARROW TO SLIDE");
     draw_string(TITLE_LINE3_X, TITLE_LINE3_Y, "ESCAPE RESTARTS LEVEL");
@@ -402,8 +409,45 @@ static TitleMenuChoice show_title_screen(void) {
     draw_string(MENU_HINT_X, MENU_HINT_Y, "SELECT THEN PRESS SPACE");
     draw_menu_pointer(choice);
 
+    /* The logo keeps rippling for as long as the title screen is up --
+     * one step of TITLE_LOGO_BOUNCE_Y per tick, wrapping back to frame
+     * 0 forever, interleaved with the existing key poll below so a
+     * selection can land on any frame. */
     for (;;) {
+        int y;
+
         wait_vbl();
+
+        y = TITLE_LOGO_BOUNCE_Y[logo_frame];
+
+        /* Push y to the front of the per-column history (so column c
+         * is drawn c VBLs behind the one to its left, giving the wave
+         * its "sweeping across" look), clearing only each column's own
+         * exposed sliver as it shifts -- same trick as a rigid bounce
+         * would use, just applied per column instead of once for the
+         * whole logo. A full-box clear every frame (200x82px) was
+         * tried first and was both slow and visibly flickery -- narrow
+         * per-column slivers (LOGO_RIPPLE_COL_PX wide) add up to far
+         * less area. */
+        for (col_i = LOGO_RIPPLE_COLUMNS - 1; col_i >= 0; col_i--) {
+            int old_y = logo_col_history[col_i];
+            int new_y = (col_i == 0) ? y : logo_col_history[col_i - 1];
+            int col_x = TITLE_LOGO_X + col_i * LOGO_RIPPLE_COL_PX;
+
+            if (new_y > old_y) {
+                clear_rect(col_x, old_y, LOGO_RIPPLE_COL_PX, new_y - old_y);
+            } else if (new_y < old_y) {
+                clear_rect(col_x, new_y + TITLE_LOGO_H, LOGO_RIPPLE_COL_PX, old_y - new_y);
+            }
+            logo_col_history[col_i] = (unsigned char)new_y;
+        }
+        ripple_logo_big_cached_y(logo_col_history);
+
+        logo_frame++;
+        if (logo_frame == (int)TITLE_LOGO_BOUNCE_FRAMES) {
+            logo_frame = 0;
+        }
+
         bits = kbd_row(KEY_ROW1);
         pressed = bits & ~prev_bits;
         prev_bits = bits;
