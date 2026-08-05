@@ -1,5 +1,3 @@
-![Logo QLuzznic](ql/assets/logo_qluzznic.png)
-
 # QLuzznic
 
 A Vexed-style block-matching puzzle game for the Sinclair QL, written in C
