@@ -48,6 +48,55 @@ extern void ripple_logo_big_cached_y(unsigned char *y_history);
 #define KEY_ROW_SHIFT 7
 #define K_SHIFT 0
 
+/* ESDF and IJKL as left-hand/right-hand alternates to the arrow keys:
+ * on a real QL the arrows sit right next to the space bar (see
+ * K1_LEFT/K1_RIGHT/K1_SPACE above, all in KEY_ROW1), cramped for
+ * actual play. Row/bit for each found the same way as HEX_KEY_TABLE
+ * below (sQLux's qlkeys.h QL_* codes through row=7-code/8,
+ * bit=code%8); QL_D/E/F cross-checked exactly against that table's
+ * existing D/E/F entries before trusting the formula for the other,
+ * previously-unused keys (S, I, J, K, L). Conveniently, S/F share row
+ * 3 with K, and D shares row 4 with J/L, so only 4 kbd_row reads
+ * (rows 3, 4, 5, 6) cover both schemes. add_alt_movement_bits ORs all
+ * of them into the same K1_UP/LEFT/DOWN/RIGHT bit positions KEY_ROW1
+ * already uses, so every caller of kbd_row(KEY_ROW1) downstream (menu
+ * selection, cursor movement, the space+arrow slide) sees ESDF, IJKL
+ * and the arrows as fully interchangeable without any other code
+ * change. */
+#define ESDF_ROW_SF 3
+#define ESDF_BIT_S 3
+#define ESDF_BIT_F 4
+#define ESDF_ROW_D 4
+#define ESDF_BIT_D 6
+#define ESDF_ROW_E 6
+#define ESDF_BIT_E 4
+
+#define IJKL_ROW_K 3  /* same row as ESDF_ROW_SF */
+#define IJKL_BIT_K 2
+#define IJKL_ROW_JL 4 /* same row as ESDF_ROW_D */
+#define IJKL_BIT_J 7
+#define IJKL_BIT_L 0
+#define IJKL_ROW_I 5
+#define IJKL_BIT_I 2
+
+static int add_alt_movement_bits(int bits) {
+    int row3 = kbd_row(ESDF_ROW_SF); /* S, F, K */
+    int row4 = kbd_row(ESDF_ROW_D);  /* D, J, L */
+
+    if (row3 & (1 << ESDF_BIT_S)) bits |= (1 << K1_LEFT);
+    if (row3 & (1 << ESDF_BIT_F)) bits |= (1 << K1_RIGHT);
+    if (row3 & (1 << IJKL_BIT_K)) bits |= (1 << K1_DOWN);
+
+    if (row4 & (1 << ESDF_BIT_D)) bits |= (1 << K1_DOWN);
+    if (row4 & (1 << IJKL_BIT_J)) bits |= (1 << K1_LEFT);
+    if (row4 & (1 << IJKL_BIT_L)) bits |= (1 << K1_RIGHT);
+
+    if (kbd_row(ESDF_ROW_E) & (1 << ESDF_BIT_E)) bits |= (1 << K1_UP);
+    if (kbd_row(IJKL_ROW_I) & (1 << IJKL_BIT_I)) bits |= (1 << K1_UP);
+
+    return bits;
+}
+
 /* game.js: CURSOR_BLINK_MS=120 per animation frame. At 50Hz, ~6 VBL
  * frames per step. */
 #define CURSOR_FRAME_TICKS 6
@@ -187,6 +236,8 @@ static const unsigned char TITLE_LOGO_BOUNCE_Y[] = {
 #define TITLE_LINE2_Y 112
 #define TITLE_LINE3_X 44  /* "ESCAPE RESTARTS LEVEL" = 21*8=168px */
 #define TITLE_LINE3_Y 128
+#define TITLE_LINE4_X 12  /* "ESDF OR IJKL ALSO MOVE CURSOR" = 29*8=232px */
+#define TITLE_LINE4_Y 144
 
 /* Title screen menu: NEW GAME / ENTER CODE, Up/Down to select (only
  * two items, so either arrow just flips the choice), Space to
@@ -404,6 +455,7 @@ static TitleMenuChoice show_title_screen(void) {
     draw_string(TITLE_LINE1_X, TITLE_LINE1_Y, "ARROWS MOVE CURSOR");
     draw_string(TITLE_LINE2_X, TITLE_LINE2_Y, "SPACE THEN ARROW TO SLIDE");
     draw_string(TITLE_LINE3_X, TITLE_LINE3_Y, "ESCAPE RESTARTS LEVEL");
+    draw_string(TITLE_LINE4_X, TITLE_LINE4_Y, "ESDF OR IJKL ALSO MOVE CURSOR");
     draw_string(MENU_ITEM_X, MENU_ITEM1_Y, "NEW GAME");
     draw_string(MENU_ITEM_X, MENU_ITEM2_Y, "ENTER CODE");
     draw_string(MENU_HINT_X, MENU_HINT_Y, "SELECT THEN PRESS SPACE");
@@ -448,7 +500,7 @@ static TitleMenuChoice show_title_screen(void) {
             logo_frame = 0;
         }
 
-        bits = kbd_row(KEY_ROW1);
+        bits = add_alt_movement_bits(kbd_row(KEY_ROW1));
         pressed = bits & ~prev_bits;
         prev_bits = bits;
 
@@ -667,7 +719,7 @@ void game_loop(void) {
 
         wait_vbl();
 
-        bits = kbd_row(KEY_ROW1);
+        bits = add_alt_movement_bits(kbd_row(KEY_ROW1));
         pressed = bits & ~prev_bits; /* edge-triggered: only just-pressed keys */
         prev_bits = bits;
 
