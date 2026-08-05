@@ -39,10 +39,19 @@ build/$(NAME).qlpak: build/$(NAME)_bin boot $(NAME).QCF tools/mkqlpak.py
 	cp $(NAME).QCF build/$(NAME).QCF
 	cd build && $(PYTHON) ../tools/mkqlpak.py $(NAME)
 
+# Bootable microdrive image for real QL hardware / the MiSTer QL core --
+# see tools/mkmdv.py for format notes. Not part of `all`: only needed
+# when actually deploying outside QemuLator.
+build/$(NAME).mdv: build/$(NAME)_bin boot tools/mkmdv.py
+	cp boot build/boot
+	cd build && $(PYTHON) ../tools/mkmdv.py $(NAME)
+
+mdv: build/$(NAME).mdv
+
 run: build/$(NAME).qlpak
 	open -a "$(QEMULATOR_APP)" "$(CURDIR)/build/$(NAME).qlpak"
 
 clean:
 	rm -rf build
 
-.PHONY: all run clean
+.PHONY: all run clean mdv
