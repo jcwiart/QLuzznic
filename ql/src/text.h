@@ -19,11 +19,12 @@ void draw_number(int x, int y, int value);
  * GLYPH_PX apart per character. */
 void draw_string(int x, int y, const char *s);
 
-#define BANNER_GLYPH_PX 16 /* must match tools/gen_banner_font.py's CELL */
+#define BANNER_GLYPH_PX 16 /* horizontal advance per character -- the doubled glyph itself is 16x14, see draw_banner_glyph in asm/display.s */
 
-/* Draws one banner-font character (letters needed for "LEVEL COMPLETE"
- * + space, uppercase only) at an absolute screen pixel position. x
- * must be a multiple of 4. Unsupported characters draw as blank. */
+/* Draws one banner-font character ('A'-'Z', uppercase only -- a 2x
+ * doubling of draw_char's own small font, not a separate table) at
+ * an absolute screen pixel position. x must be a multiple of 4.
+ * Unsupported characters draw as blank. */
 void draw_banner_char(int x, int y, char c);
 
 /* Draws a string in the banner font, left-aligned starting at (x,y),

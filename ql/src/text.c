@@ -56,27 +56,17 @@ void draw_number(int x, int y, int value) {
     }
 }
 
-/* Order matches tools/gen_banner_font.py's ORDER list exactly. */
+/* glyph_index matches draw_char's small-font layout ('A'-'Z' -> 0-25)
+ * exactly -- draw_banner_glyph now reads and doubles the same
+ * _font_data table live instead of a separately-stored 16x16 font,
+ * so no dedicated banner ORDER table is needed any more (see
+ * draw_banner_glyph's comment in asm/display.s). */
 void draw_banner_char(int x, int y, char c) {
     int glyph_index;
-    switch (c) {
-        case 'L': glyph_index = 0; break;
-        case 'E': glyph_index = 1; break;
-        case 'V': glyph_index = 2; break;
-        case 'C': glyph_index = 3; break;
-        case 'O': glyph_index = 4; break;
-        case 'M': glyph_index = 5; break;
-        case 'P': glyph_index = 6; break;
-        case 'T': glyph_index = 7; break;
-        case 'G': glyph_index = 8; break;
-        case 'A': glyph_index = 9; break;
-        case 'R': glyph_index = 10; break;
-        case 'Q': glyph_index = 12; break;
-        case 'U': glyph_index = 13; break;
-        case 'Z': glyph_index = 14; break;
-        case 'N': glyph_index = 15; break;
-        case 'I': glyph_index = 16; break;
-        default: glyph_index = 11; break; /* space, or anything else: blank */
+    if (c >= 'A' && c <= 'Z') {
+        glyph_index = c - 'A';
+    } else {
+        glyph_index = FONT_BLANK_INDEX; /* space, or anything else: blank */
     }
     draw_banner_glyph(x, y, glyph_index);
 }

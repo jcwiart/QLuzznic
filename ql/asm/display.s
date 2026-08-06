@@ -813,17 +813,27 @@ draw_glyph_row_loop:
 	rts
 
 ; void draw_banner_glyph(int x, int y, int glyph_index)
-; Opaque copy of one 16x16 banner-font glyph (tools/gen_banner_font.py)
-; at an absolute screen pixel position -- same shape as draw_glyph, just
-; reading the bigger font table and 16 rows/8 bytes instead of 8/4.
+; Draws a banner-sized (16x14) glyph by reading the small _font_data
+; table (draw_glyph's own 8x7 data, glyph_index using the SAME 'A'-'Z'
+; -> 0-25 layout -- see draw_banner_char in text.c) and doubling it
+; live via logo_double_table, the same table-driven 2x expansion the
+; title logo uses -- not a separately-stored 16x16 font (that was
+; _banner_font_data, 2176 bytes, deleted): a real (or emulated-as-
+; real) microdrive boot has less RAM headroom than QemuLator's PakDir
+; shortcut for the same 128K machine, and freeing that up mattered
+; more than the couple of rows' difference between a doubled 8x7
+; (16x14) and a hand-drawn 16x16 (see [[ql-boot-crash-is-memory]]).
 	.extern	_draw_banner_glyph
 _draw_banner_glyph:
 	link	a6,#0
-	move.l	d2,-(sp)
+	movem.l	d0-d3/d6-d7/a0-a3,-(sp)
 
 	move.l	16(a6),d0		; glyph_index
-	lsl.l	#7,d0			; *128 bytes/glyph (16x16, 8 bytes/row)
-	lea	_banner_font_data,a0
+	move.l	d0,d3
+	lsl.l	#5,d0			; *32
+	lsl.l	#2,d3			; *4
+	sub.l	d3,d0			; *32 - *4 = *28 bytes/glyph (8x7, 4 bytes/row)
+	lea	_font_data,a0
 	adda.l	d0,a0
 
 	move.l	12(a6),d0		; y (absolute pixel)
@@ -835,17 +845,49 @@ _draw_banner_glyph:
 	add.l	d1,d0
 	lea	scr0,a1
 	adda.l	d0,a1
+	lea	scr_llen(a1),a2
 
-	moveq	#16-1,d1		; 16 rows, 8 bytes/row
+	lea	logo_double_table,a3
+	moveq	#7-1,d2			; 7 source rows -> 14 doubled screen rows
 draw_banner_glyph_row_loop:
-	move.l	(a0)+,d2
-	move.l	d2,(a1)
-	move.l	(a0)+,d2
-	move.l	d2,4(a1)
-	lea	scr_llen(a1),a1
-	dbf	d1,draw_banner_glyph_row_loop
+	moveq	#(8/4)-1,d1		; 2 (even,odd) pixel-groups per row (8px/4px-per-group)
+draw_banner_glyph_group_loop:
+	move.b	(a0)+,d6		; even byte (mode 8: 2 bytes/group, one bit-plane each --
+	move.b	(a0)+,d7		; odd byte  see tools/gen_font.py's encode_cell)
 
-	move.l	(sp)+,d2
+	moveq	#0,d0			; group A (pixels 0,1 doubled)
+	move.b	d6,d0
+	lsr.b	#4,d0
+	move.b	0(a3,d0.w),d3
+	move.b	d3,(a1)+
+	move.b	d3,(a2)+
+	moveq	#0,d0
+	move.b	d7,d0
+	lsr.b	#4,d0
+	move.b	0(a3,d0.w),d3
+	move.b	d3,(a1)+
+	move.b	d3,(a2)+
+
+	moveq	#0,d0			; group B (pixels 2,3 doubled)
+	move.b	d6,d0
+	and.b	#$0f,d0
+	move.b	0(a3,d0.w),d3
+	move.b	d3,(a1)+
+	move.b	d3,(a2)+
+	moveq	#0,d0
+	move.b	d7,d0
+	and.b	#$0f,d0
+	move.b	0(a3,d0.w),d3
+	move.b	d3,(a1)+
+	move.b	d3,(a2)+
+
+	dbf	d1,draw_banner_glyph_group_loop
+
+	adda.l	#2*scr_llen-8,a1	; next row-pair (8 bytes/row already written via (a1)+)
+	adda.l	#2*scr_llen-8,a2
+	dbf	d2,draw_banner_glyph_row_loop
+
+	movem.l	(sp)+,d0-d3/d6-d7/a0-a3
 	unlk	a6
 	rts
 
