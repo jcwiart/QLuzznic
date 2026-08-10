@@ -6,7 +6,8 @@
 A Puzznic/Vexed-style block-matching puzzle game for the Sinclair QL, written in C
 and 68000 assembly, running in mode 8 (256x256, 8 colours) on real
 128K-RAM QL hardware (and in emulation via [QemuLator][qemulator] or the
-[MiSTer QL core][ql-mister]).
+[MiSTer QL core][ql-mister] -- on MiSTer, use a **JS ROM, not Minerva**;
+Minerva's different memory layout makes the game fail to boot).
 
 Ships its own 100-level campaign (`ql/assets/qluzznic-levels.json`), a
 "joker" wildcard piece, a hex continue-code system, and a title screen
