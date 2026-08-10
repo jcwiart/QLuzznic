@@ -20,14 +20,9 @@ from pathlib import Path
 
 INNER_W = 9
 INNER_H = 6
-LEVEL_ROW_STRIDE = 12  # LevelDef.interior's actual row width in game.h --
-             # wider than INNER_W so sizeof(LevelDef) decomposes into a
-             # couple of inline shifts for LEVELS[level_index] indexing
-             # instead of c68 falling back to a real multiply routine
-             # (.Xulmul); see game.h's LEVEL_ROW_STRIDE comment. Levels
-             # only ever use the first INNER_W columns of each row --
-             # the rest (including the always-0 INNER_W..LEVEL_ROW_STRIDE
-             # range) is padding, never read.
+LEVEL_ROW_STRIDE = INNER_W  # must match game.h's LEVEL_ROW_STRIDE exactly --
+             # no padding (unlike the old LEVEL_ROW_STRIDE=12), see that
+             # #define's comment for the memory-vs-one-.Xulmul-call tradeoff.
 
 STEEL = 9
 JOKER = 18

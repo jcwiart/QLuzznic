@@ -54,19 +54,24 @@ typedef unsigned char Grid[OUTER_H][GRID_STRIDE];
  * 1..8 (an original colour id -- NOT a sprite index; build_level()
  * remaps colours to sprite indices in first-appearance order, the same
  * remap the project's original game.js prototype used). */
-/* interior's row width is LEVEL_ROW_STRIDE, not INNER_W, for the same
- * reason Grid's is GRID_STRIDE (see that comment) -- and it has to
- * satisfy that same "clean 2-power decomposition" constraint TWICE:
- * once directly (row*LEVEL_ROW_STRIDE, indexing within one level's
- * interior[][]) and once multiplied by INNER_H (INNER_H*LEVEL_ROW_STRIDE
- * = sizeof(LevelDef), for LEVELS[level_index] indexing). INNER_H(6)*
- * INNER_W(9)=54=32+16+4+2 (a 4-term sum) fails the second check, which
- * is what sent this down this path in the first place. LEVEL_ROW_STRIDE
- * (12)=8+4 passes the direct check, and INNER_H(6)*12=72=64+8 passes
- * the sizeof(LevelDef) check too. Every level's real data still only
- * ever fills the first INNER_W columns of each row -- see
- * tools/gen_levels.py, which pads the rest with 0. */
-#define LEVEL_ROW_STRIDE 12
+/* interior's row width is LEVEL_ROW_STRIDE == INNER_W: no padding, so
+ * every one of the 100 levels' interior[][] uses only real cells, not
+ * dead weight -- worth 1800 bytes (18/level) of game_bin, which is
+ * what real-microdrive/MiSTer boot needed (see
+ * [[ql-boot-crash-is-memory]]'s fifth instance) and QemuLator's
+ * PakDir shortcut never demanded.
+ *
+ * This trades away one of the two "avoid .Xulmul" properties the
+ * previous LEVEL_ROW_STRIDE(12) had (see git history for the old
+ * comment/reasoning): row*LEVEL_ROW_STRIDE (9=8+1) still decomposes
+ * into a shift+add, avoiding .Xulmul for the *inner* per-row access
+ * in build_level()'s loop -- but INNER_H(6)*LEVEL_ROW_STRIDE(9)=54=
+ * 32+16+4+2 (a 4-term sum) does NOT, so LEVELS[level_index] indexing
+ * (game_loop.c's load_level(), the *outer* access) now costs one real
+ * .Xulmul call -- confirmed via `qcc -S` on an equivalent struct-array
+ * index. Acceptable: that's once per level transition, not once per
+ * row or per frame -- nothing changes in a hot loop. */
+#define LEVEL_ROW_STRIDE INNER_W
 typedef struct {
     unsigned char interior[INNER_H][LEVEL_ROW_STRIDE];
 } LevelDef;
