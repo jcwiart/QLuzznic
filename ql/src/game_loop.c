@@ -29,7 +29,7 @@ extern void clear_rect(int x, int y, int w, int h);
 extern void blit_tile(int col, int row, int sprite_index);
 extern void blit_logo_mini(void);
 extern void decode_logo_big(void);
-extern void ripple_logo_big_cached_y(unsigned char *y_history);
+extern void ripple_logo_advance(unsigned char *y_history, int new_head_y);
 
 #define KEY_ROW1 1
 #define K1_LEFT  1
@@ -173,7 +173,7 @@ static int add_alt_movement_bits(int bits) {
 #define CODE_DIGITS_X 132 /* CODE_LABEL_X + 5*GLYPH_PX ("CODE:" incl. no trailing space) */
 
 /* Title screen, shown once before the first level loads. Real logo
- * (200x58, ripple_logo_big_cached_y in asm/display.s -- see
+ * (200x58, ripple_logo_advance in asm/display.s -- see
  * tools/png2logo.py) replaces the old placeholder banner-font
  * "QLUZZNIC" text; x is fixed at compile time in the asm
  * (logo_big_x=28 there), y is a runtime argument so the logo can be
@@ -189,7 +189,6 @@ static int add_alt_movement_bits(int bits) {
 #define TITLE_LOGO_CLEAR_H (TITLE_LOGO_REST_Y + TITLE_LOGO_H) /* bounce range + logo height, covers every frame's start position -- cleared before the first bounce and again before each replay */
 
 #define LOGO_RIPPLE_COLUMNS 25 /* must match asm/display.s's logo_big_row_bytes/logo_ripple_col_bytes exactly (8px = 4 bytes per column) */
-#define LOGO_RIPPLE_COL_PX 8   /* screen pixel width of one column -- must match asm's logo_ripple_col_bytes*2 exactly */
 
 /* Perpetual bounce curve for the title logo: falls from
  * TITLE_LOGO_CLEAR_Y accelerating under gravity (g=0.45px/frame^2,
@@ -221,9 +220,9 @@ static int add_alt_movement_bits(int bits) {
  * visible flicker (the clear-then-redraw gap became visible on
  * screen) because each "frame" was actually taking multiple real VBL
  * periods to draw. Only clearing the exposed sliver each step (not
- * the whole bounding box), plus decode_logo_big/blit_logo_big_cached_y
+ * the whole bounding box), plus decode_logo_big/ripple_logo_advance
  * (decode the PackBits stream once into logo_big_cache, then every
- * frame is a plain byte copy) fixed the slowness, which is what makes
+ * frame is a plain word copy) fixed the slowness, which is what makes
  * looping this forever affordable. */
 static const unsigned char TITLE_LOGO_BOUNCE_Y[] = {
     12, 12, 13, 15, 16, 19, 21, 24, 21, 19, 16, 15, 13, 12,
@@ -472,28 +471,15 @@ static TitleMenuChoice show_title_screen(void) {
 
         y = TITLE_LOGO_BOUNCE_Y[logo_frame];
 
-        /* Push y to the front of the per-column history (so column c
-         * is drawn c VBLs behind the one to its left, giving the wave
-         * its "sweeping across" look), clearing only each column's own
-         * exposed sliver as it shifts -- same trick as a rigid bounce
-         * would use, just applied per column instead of once for the
-         * whole logo. A full-box clear every frame (200x82px) was
-         * tried first and was both slow and visibly flickery -- narrow
-         * per-column slivers (LOGO_RIPPLE_COL_PX wide) add up to far
-         * less area. */
-        for (col_i = LOGO_RIPPLE_COLUMNS - 1; col_i >= 0; col_i--) {
-            int old_y = logo_col_history[col_i];
-            int new_y = (col_i == 0) ? y : logo_col_history[col_i - 1];
-            int col_x = TITLE_LOGO_X + col_i * LOGO_RIPPLE_COL_PX;
-
-            if (new_y > old_y) {
-                clear_rect(col_x, old_y, LOGO_RIPPLE_COL_PX, new_y - old_y);
-            } else if (new_y < old_y) {
-                clear_rect(col_x, new_y + TITLE_LOGO_H, LOGO_RIPPLE_COL_PX, old_y - new_y);
-            }
-            logo_col_history[col_i] = (unsigned char)new_y;
-        }
-        ripple_logo_big_cached_y(logo_col_history);
+        /* Shifts the per-column history (column c takes column c-1's
+         * old Y, one extra VBL of delay per column to the right, which
+         * is what gives the wave its "sweeping across" look), clears
+         * only each column's own exposed sliver, and redraws every
+         * column from logo_big_cache -- all folded into one asm call
+         * now; see ripple_logo_advance's comment in asm/display.s for
+         * why this used to be a C-side loop calling clear_rect per
+         * column instead. */
+        ripple_logo_advance(logo_col_history, y);
 
         logo_frame++;
         if (logo_frame == (int)TITLE_LOGO_BOUNCE_FRAMES) {

@@ -668,7 +668,7 @@ logo_big_row_advance	equ	2*scr_llen - logo_big_row_bytes
 ; expansion the old fixed/scrolling logo blits used) into
 ; logo_big_cache -- but ONE copy per source row, not the vertically-
 ; doubled pair a screen blit would need, since the two destination
-; lines are always identical; ripple_logo_big_cached_y below
+; lines are always identical; ripple_logo_advance below
 ; re-duplicates each cached row to both screen lines at blit time
 ; instead. That halves the cache to logo_mini_h(29) rows -- 2900
 ; bytes instead of 5800 for all 58 doubled rows, which mattered: the
@@ -720,30 +720,105 @@ decode_logo_big_group_loop:
 	movem.l	(sp)+,d0-d7/a0-a3
 	rts
 
-; void ripple_logo_big_cached_y(unsigned char *y_history)
-; Draws the logo as logo_big_row_bytes/logo_ripple_col_bytes
-; independent logo_ripple_col_bytes*2-px-wide vertical strips, each at
-; its own Y from y_history[column] (one byte per strip, left to right)
-; instead of one rigid Y -- caller (show_title_screen in game_loop.c)
-; delays each entry by one extra VBL versus its left neighbour, giving
-; a wave that sweeps across the logo as it bounces. More, smaller
-; inner loops than a single rigid blit (a 29-row loop per column
-; instead of one 29-row loop total) -- a first 4px/column (2-byte)
-; version was slow and flickery with a full-box clear every frame;
-; switching to 8px/column plus letting the caller clear only each
-; column's own exposed sliver (instead of the whole bounding box)
-; fixed both.
+; void ripple_logo_advance(unsigned char *y_history, int new_head_y)
+; Advances the title logo's rippling bounce by one VBL: shifts each of
+; logo_big_row_bytes/logo_ripple_col_bytes independent
+; logo_ripple_col_bytes*2-px-wide vertical strips to the next Y in its
+; own per-column history (column c takes column c-1's old Y, column 0
+; takes new_head_y -- caller's job is just to hand over this frame's
+; head Y, one extra VBL of delay per column to the right is what gives
+; the wave its "sweeping across" look), clearing only each column's own
+; exposed sliver as it moves, then redraws every column from
+; logo_big_cache (see decode_logo_big) at its new Y. A first 4px/column
+; (2-byte) version was slow and flickery with a full-box clear every
+; frame; switching to 8px/column plus a per-column sliver clear (rather
+; than the whole bounding box) fixed both -- see TITLE_LOGO_BOUNCE_Y's
+; comment in game_loop.c.
+;
+; Used to be two pieces: game_loop.c's own column loop calling
+; clear_rect (a generic, C-callable routine -- link/movem/param-push
+; overhead paid up to 25 times a frame, and a byte-at-a-time clr.b) for
+; the sliver, then a separate call here just for the redraw, which
+; recomputed the same column's screen address from scratch. Folding the
+; shift, the clear and the redraw into one call means each column's
+; address is computed once and reused for both, and the sliver clear
+; can use clr.w (this logo is always drawn at an even x, so every
+; column's dest address is word-aligned) instead of clear_rect's
+; general byte loop. The redraw's own inner copy is now word-sized too
+; (2 bytes/move instead of 1): on the 68008's 8-bit external bus a .w
+; move isn't faster at moving the bytes themselves, but it halves the
+; number of opcode fetches and dbf iterations for the same data, which
+; is where the real saving is.
+;
+; Pass 1 (shift + clear) walks columns highest index to lowest -- it
+; must, since column c's new Y reads column (c-1)'s OLD value, which
+; would already be overwritten if c-1 were processed first. Pass 2
+; (the redraw) is order-independent and left as the original 0..24
+; sweep.
 logo_ripple_col_bytes	equ	4		; 8px/column (2px/byte)
-	.extern	_ripple_logo_big_cached_y
-_ripple_logo_big_cached_y:
+	.extern	_ripple_logo_advance
+_ripple_logo_advance:
 	link	a6,#0
-	movem.l	d0-d6/a0-a3,-(sp)
-	move.l	8(a6),a3		; y_history pointer
+	movem.l	d0-d7/a0-a3,-(sp)
+	move.l	8(a6),a3		; y_history pointer (untouched by pass 1, still &y_history[0] for pass 2)
+	move.l	12(a6),d7		; new_head_y
+
+	moveq	#logo_big_row_bytes/logo_ripple_col_bytes-1,d5	; column counter, 24..0 (dbf order)
+ripple_shift_loop:
+	lea	(a3),a0
+	adda.l	d5,a0			; a0 = &y_history[d5] (one byte/column, so d5 is the index as-is)
+	moveq	#0,d1
+	move.b	(a0),d1			; d1 = old_y
+
+	tst.l	d5
+	bne	ripple_shift_prev
+	move.l	d7,d2			; column 0 takes this frame's fresh head Y
+	bra	ripple_shift_have_new
+ripple_shift_prev:
+	moveq	#0,d2
+	move.b	-1(a0),d2		; column c takes column c-1's OLD y (not yet overwritten -- see above)
+ripple_shift_have_new:
+	move.b	d2,(a0)			; y_history[d5] = new_y
+
+	move.l	d5,d3
+	lsl.l	#2,d3			; d3 = this column's byte offset within a cache/screen row
+
+	cmp.l	d1,d2			; flags = new_y - old_y
+	beq	ripple_shift_next	; unchanged (a hover frame): nothing exposed
+	bhi	ripple_clear_top	; new_y > old_y: moved down, sliver exposed at the top
+
+	; new_y < old_y: moved up, sliver exposed at the bottom
+	move.l	d1,d0
+	sub.l	d2,d0			; d0 = old_y - new_y (sliver height)
+	moveq	#0,d6
+	move.b	d2,d6
+	add.l	#logo_big_h,d6		; d6 = new_y + logo_big_h
+	bra	ripple_clear_do
+ripple_clear_top:
+	move.l	d2,d0
+	sub.l	d1,d0			; d0 = new_y - old_y (sliver height)
+	moveq	#0,d6
+	move.b	d1,d6			; d6 = old_y
+ripple_clear_do:
+	lsl.l	#7,d6			; y*128
+	add.l	#logo_big_x/2,d6
+	add.l	d3,d6
+	lea	scr0,a1
+	adda.l	d6,a1
+	subq.l	#1,d0
+ripple_clear_row_loop:
+	clr.w	(a1)
+	clr.w	2(a1)
+	lea	scr_llen(a1),a1
+	dbf	d0,ripple_clear_row_loop
+ripple_shift_next:
+	dbf	d5,ripple_shift_loop
+
 	moveq	#0,d4			; this column's byte offset within a cache/screen row
 	moveq	#logo_big_row_bytes/logo_ripple_col_bytes-1,d5	; column counter
-ripple_col_loop:
+ripple_draw_col_loop:
 	moveq	#0,d0
-	move.b	(a3)+,d0		; y for this column
+	move.b	(a3)+,d0		; y for this column (already updated above)
 	lsl.l	#7,d0			; y*128
 	add.l	#logo_big_x/2,d0
 	add.l	d4,d0			; + this column's offset within the row
@@ -753,22 +828,23 @@ ripple_col_loop:
 	lea	logo_big_cache,a0
 	adda.l	d4,a0
 	moveq	#logo_mini_h-1,d2
-ripple_row_loop:
-	moveq	#logo_ripple_col_bytes-1,d6
-ripple_byte_loop:
-	move.b	(a0)+,d3
-	move.b	d3,(a1)+
-	move.b	d3,(a2)+
-	dbf	d6,ripple_byte_loop
+ripple_draw_row_loop:
+	move.w	(a0)+,d3		; logo_ripple_col_bytes(4) = 2 words/row
+	move.w	d3,(a1)+
+	move.w	d3,(a2)+
+	move.w	(a0)+,d3
+	move.w	d3,(a1)+
+	move.w	d3,(a2)+
 	suba.l	#logo_ripple_col_bytes,a1	; back to this row's start
 	suba.l	#logo_ripple_col_bytes,a2
 	adda.l	#logo_big_row_bytes-logo_ripple_col_bytes,a0	; next cache row, same column
 	adda.l	#scr_llen*2,a1
 	adda.l	#scr_llen*2,a2
-	dbf	d2,ripple_row_loop
+	dbf	d2,ripple_draw_row_loop
 	add.l	#logo_ripple_col_bytes,d4
-	dbf	d5,ripple_col_loop
-	movem.l	(sp)+,d0-d6/a0-a3
+	dbf	d5,ripple_draw_col_loop
+
+	movem.l	(sp)+,d0-d7/a0-a3
 	unlk	a6
 	rts
 
